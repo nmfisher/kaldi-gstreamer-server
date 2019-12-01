@@ -46,8 +46,9 @@ class ServerWebsocket(WebSocketClient):
     STATE_CANCELLING = 8
     STATE_FINISHED = 100
 
-    def __init__(self, uri, decoder_pipeline, post_processor, full_post_processor=None):
+    def __init__(self, uri, outdir, decoder_pipeline, post_processor, full_post_processor=None):
         self.uri = uri
+        self.outdir = outdir
         self.decoder_pipeline = decoder_pipeline
         self.post_processor = post_processor
         self.full_post_processor = full_post_processor
@@ -116,24 +117,31 @@ class ServerWebsocket(WebSocketClient):
         else:
             if self.state != self.STATE_CANCELLING and self.state != self.STATE_EOS_RECEIVED and self.state != self.STATE_FINISHED:
                 if isinstance(m, ws4py.messaging.BinaryMessage):
+                    if self.expected is None:
+                        print("ERROR: expected unset")
+                    filename = os.path.join(self.outdir, self.request_id + u"_" + self.expected + ".raw")
+                    with open(filename.encode('utf-8'),"ab") as outfile:
+                        outfile.write(m.data)
                     self.decoder_pipeline.process_data(m.data)
                     self.state = self.STATE_PROCESSING
                 elif isinstance(m, ws4py.messaging.TextMessage):
-                    props = json.loads(str(m))
-                    if 'adaptation_state' in props:
-                        as_props = props['adaptation_state']
-                        if as_props.get('type', "") == "string+gzip+base64":
-                            adaptation_state = zlib.decompress(base64.b64decode(as_props.get('value', '')))
-                            logger.info("%s: Setting adaptation state to user-provided value" % (self.request_id))
-                            self.decoder_pipeline.set_adaptation_state(adaptation_state)
-                        else:
-                            logger.warning("%s: Cannot handle adaptation state type " % (self.request_id, as_props.get('type', "")))
-                    else:
-                        logger.warning("%s: Got JSON message but don't know what to do with it" % (self.request_id))
+                    self.expected = unicode(str(m), 'utf-8')
+                    #props = json.loads(str(m))
+                    #if 'adaptation_state' in props:
+                    #    as_props = props['adaptation_state']
+                    #    if as_props.get('type', "") == "string+gzip+base64":
+                    #        adaptation_state = zlib.decompress(base64.b64decode(as_props.get('value', '')))
+                    #        logger.info("%s: Setting adaptation state to user-provided value" % (self.request_id))
+                    #        self.decoder_pipeline.set_adaptation_state(adaptation_state)
+                    #    else:
+                    #        logger.warning("%s: Cannot handle adaptation state type " % (self.request_id, as_props.get('type', "")))
+                    #else:
+                    #    logger.warning("%s: Got JSON message but don't know what to do with it" % (self.request_id))
             else:
                 logger.info("%s: Ignoring data, worker already in state %d" % (self.request_id, self.state))
 
     def finish_request(self):
+        self.expected = None
         if self.state == self.STATE_CONNECTED:
             # connection closed when we are not doing anything
             self.decoder_pipeline.finish_request()
@@ -195,6 +203,7 @@ class ServerWebsocket(WebSocketClient):
                     self.send(json.dumps(event))
                 except:
                     e = sys.exc_info()[1]
+                    print(e)
                     logger.warning("Failed to send event to master: %s" % e)
         finally:
             self._increment_num_processing(-1)
@@ -356,9 +365,9 @@ class ServerWebsocket(WebSocketClient):
                 hyp["transcript"] = processed_transcripts[i]
         raise tornado.gen.Return(full_result)        
 
-def main_loop(uri, decoder_pipeline, post_processor, full_post_processor=None):
+def main_loop(uri,outdir, decoder_pipeline, post_processor, full_post_processor=None):
     while True:
-        ws = ServerWebsocket(uri, decoder_pipeline, post_processor, full_post_processor=full_post_processor)
+        ws = ServerWebsocket(uri, outdir, decoder_pipeline, post_processor, full_post_processor=full_post_processor)
         try:
             logger.info("Opening websocket connection to master server")
             ws.connect()
@@ -378,6 +387,7 @@ def main():
     parser.add_argument('-u', '--uri', default="ws://localhost:8888/worker/ws/speech", dest="uri", help="Server<-->worker websocket URI")
     parser.add_argument('-f', '--fork', default=1, dest="fork", type=int)
     parser.add_argument('-c', '--conf', dest="conf", help="YAML file with decoder configuration")
+    parser.add_argument('-o', '--outdir', dest="outdir", default="/tmp", help="Path to save supplied audio")
 
     args = parser.parse_args()
 
@@ -417,7 +427,7 @@ def main():
 
     loop = GObject.MainLoop()
     thread.start_new_thread(loop.run, ())
-    thread.start_new_thread(main_loop, (args.uri, decoder_pipeline, post_processor, full_post_processor))  
+    thread.start_new_thread(main_loop, (args.uri, args.outdir, decoder_pipeline, post_processor, full_post_processor))  
     tornado.ioloop.IOLoop.current().start()
 
 
