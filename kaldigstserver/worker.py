@@ -170,6 +170,7 @@ class ServerWebsocket(WebSocketClient):
                     time.sleep(1)
             self.decoder_pipeline.finish_request()
             logger.info("%s: Finished waiting for EOS" % self.request_id)
+        self.saver.close()
 
 
     def closed(self, code, reason=None):
