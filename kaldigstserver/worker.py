@@ -27,6 +27,7 @@ import ws4py.messaging
 
 from decoder import DecoderPipeline
 from decoder2 import DecoderPipeline2
+from savers import GCSaver, FSSaver
 
 import common
 
@@ -119,9 +120,9 @@ class ServerWebsocket(WebSocketClient):
                 if isinstance(m, ws4py.messaging.BinaryMessage):
                     if self.expected is None:
                         print("ERROR: expected unset")
-                    filename = os.path.join(self.outdir, self.request_id + u"_" + self.expected + ".raw")
-                    with open(filename.encode('utf-8'),"ab") as outfile:
-                        outfile.write(m.data)
+
+                    self.saver.save(self.expected, m.data)
+                    
                     self.decoder_pipeline.process_data(m.data)
                     self.state = self.STATE_PROCESSING
                 elif isinstance(m, ws4py.messaging.TextMessage):
@@ -387,13 +388,26 @@ def main():
     parser.add_argument('-u', '--uri', default="ws://localhost:8888/worker/ws/speech", dest="uri", help="Server<-->worker websocket URI")
     parser.add_argument('-f', '--fork', default=1, dest="fork", type=int)
     parser.add_argument('-c', '--conf', dest="conf", help="YAML file with decoder configuration")
-    parser.add_argument('-o', '--outdir', dest="outdir", default="/tmp", help="Path to save supplied audio")
+    parser.add_argument('-s', '--saver', 
+      dest="saver", default="GCS", 
+      help="""Platform for saving utterances ( \"gcs\" or \"filesystem\"""")
+    parser.add_argument('-p', '--path', 
+      dest="savepath", 
+      default="/pagoda_utterances", 
+      help="""Path on the chosen platform where utterances will \
+       be saved (bucket name for GCS, local folder for filesystem""")
 
     args = parser.parse_args()
 
     if args.fork > 1:
         logging.info("Forking into %d processes" % args.fork)
         tornado.process.fork_processes(args.fork)
+
+    saver = args.saver.lower()
+    if saver == "gcs":
+      self.saver = GCSSaver()
+    elif saver == "filesystem":
+      self.saver = FSSaver()
 
     conf = {}
     if args.conf:
