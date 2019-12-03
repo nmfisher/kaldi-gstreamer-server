@@ -1,6 +1,5 @@
 import logging
 import os
-import cloudstorage as gcs
 import boto
 import gcs_oauth2_boto_plugin
 

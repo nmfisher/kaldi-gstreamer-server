@@ -27,7 +27,7 @@ import ws4py.messaging
 
 from decoder import DecoderPipeline
 from decoder2 import DecoderPipeline2
-from savers import GCSaver, FSSaver
+from savers import GCSSaver, FSSaver
 
 import common
 
@@ -47,9 +47,9 @@ class ServerWebsocket(WebSocketClient):
     STATE_CANCELLING = 8
     STATE_FINISHED = 100
 
-    def __init__(self, uri, outdir, decoder_pipeline, post_processor, full_post_processor=None):
+    def __init__(self, uri, saver, decoder_pipeline, post_processor, full_post_processor=None):
         self.uri = uri
-        self.outdir = outdir
+        self.saver = saver
         self.decoder_pipeline = decoder_pipeline
         self.post_processor = post_processor
         self.full_post_processor = full_post_processor
@@ -367,9 +367,9 @@ class ServerWebsocket(WebSocketClient):
                 hyp["transcript"] = processed_transcripts[i]
         raise tornado.gen.Return(full_result)        
 
-def main_loop(uri,outdir, decoder_pipeline, post_processor, full_post_processor=None):
+def main_loop(uri,saver, decoder_pipeline, post_processor, full_post_processor=None):
     while True:
-        ws = ServerWebsocket(uri, outdir, decoder_pipeline, post_processor, full_post_processor=full_post_processor)
+        ws = ServerWebsocket(uri, saver, decoder_pipeline, post_processor, full_post_processor=full_post_processor)
         try:
             logger.info("Opening websocket connection to master server")
             ws.connect()
@@ -406,9 +406,9 @@ def main():
 
     saver = args.saver.lower()
     if saver == "gcs":
-      self.saver = GCSSaver()
+      saver = GCSSaver(args.savepath)
     elif saver == "filesystem":
-      self.saver = FSSaver()
+      saver = FSSaver(args.savepath)
 
     conf = {}
     if args.conf:
@@ -442,7 +442,7 @@ def main():
 
     loop = GObject.MainLoop()
     thread.start_new_thread(loop.run, ())
-    thread.start_new_thread(main_loop, (args.uri, args.outdir, decoder_pipeline, post_processor, full_post_processor))  
+    thread.start_new_thread(main_loop, (args.uri, saver, decoder_pipeline, post_processor, full_post_processor))  
     tornado.ioloop.IOLoop.current().start()
 
 
