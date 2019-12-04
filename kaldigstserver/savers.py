@@ -19,6 +19,9 @@ class FSSaver(Saver):
   def __init__(self, outdir):
     self.outdir = outdir
 
+    if not os.path.exists(self.outdir):
+        os.makedirs(self.outdir)
+
   def get_save_path(self, request_id, expected):
       filename = self.generate_filename(request_id, expected)
       dest = os.path.join(self.outdir, filename)
@@ -48,6 +51,8 @@ class GCSSaver(Saver):
     src = self.fssaver.get_save_path(self.request_id, self.expected)
 
     dst_uri = boto.storage_uri(dest, 'gs')
+    if isinstance(src, str):
+        src = unicode(src,"utf-8")
     with open(src, "rb") as local:
       dst_uri.new_key().set_contents_from_file(local) 
     

@@ -57,7 +57,7 @@ class ServerWebsocket(WebSocketClient):
         self.pipeline_initialized = False
         self.partial_transcript = ""
         if USE_NNET2:
-            self.decoder_pipeline.set_result_handler(self._on_result)
+#            self.decoder_pipeline.set_result_handler(self._on_result)
             self.decoder_pipeline.set_full_result_handler(self._on_full_result)
             self.decoder_pipeline.set_error_handler(self._on_error)
         else:
