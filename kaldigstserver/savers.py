@@ -3,20 +3,24 @@ import os
 import boto
 import gcs_oauth2_boto_plugin
 
+logger = logging.getLogger(__name__)
+
 class Saver:
   def generate_filename(self, request_id, expected):
-    return request_id + u"_" + expected + ".raw"
+    if isinstance(expected, str):
+        expected = unicode(expected, "utf-8")
+    return request_id + u"_" + expected + u".raw"
 
   def flush(self):
     return # noop
 
-class FSSaver:
+class FSSaver(Saver):
 
   def __init__(self, outdir):
     self.outdir = outdir
 
   def get_save_path(self, request_id, expected):
-      filename = Saver.generate_filename(self, request_id, expected)
+      filename = self.generate_filename(request_id, expected)
       dest = os.path.join(self.outdir, filename)
       return dest
 
@@ -26,16 +30,12 @@ class FSSaver:
     with open(dest.encode('utf-8'),"ab") as outfile:
         outfile.write(data)
 
-class GCSSaver:
+class GCSSaver(Saver):
 
   def __init__(self, bucket):
-#    default_retry_params = gcs.RetryParams(initial_delay=0.2,
-#                                            max_delay=5.0,
-#                                            backoff_factor=2,
-#                                            max_retry_period=15)
-#    gcs.set_default_retry_params(default_retry_params)
     self.bucket = bucket
     self.fssaver = FSSaver("/tmp/")
+    logger.info("Initialized Google Cloud Storage saver for bucket %s" % bucket)
   
   def save(self, request_id, expected, data):
     self.expected = expected
@@ -43,15 +43,11 @@ class GCSSaver:
     self.fssaver.save(request_id, expected, data)
 
   def flush(self):
-    dest = self.bucket + '/' + Saver.generate_filename(self, self.request_id, self.expected)
+    dest = "gs://" + self.bucket + '/' + self.generate_filename(self.request_id, self.expected)
+    logger.info("Flushing file to %s" % dest)
     src = self.fssaver.get_save_path(self.request_id, self.expected)
 
-    #local = open(src, "rb")
-    #print(memoryview(local))
-
     dst_uri = boto.storage_uri(dest, 'gs')
-    #print(type(local))
-    print(dest)
     with open(src, "rb") as local:
       dst_uri.new_key().set_contents_from_file(local) 
     

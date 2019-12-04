@@ -121,7 +121,7 @@ class ServerWebsocket(WebSocketClient):
                     if self.expected is None:
                         print("ERROR: expected unset")
 
-                    self.saver.save(self.expected, m.data)
+                    self.saver.save(self.request_id, self.expected, m.data)
                     
                     self.decoder_pipeline.process_data(m.data)
                     self.state = self.STATE_PROCESSING
@@ -170,7 +170,7 @@ class ServerWebsocket(WebSocketClient):
                     time.sleep(1)
             self.decoder_pipeline.finish_request()
             logger.info("%s: Finished waiting for EOS" % self.request_id)
-        self.saver.close()
+
 
 
     def closed(self, code, reason=None):
@@ -242,6 +242,7 @@ class ServerWebsocket(WebSocketClient):
                     logger.warning("Failed to send event to master: %s" % e)
         finally:
             self._increment_num_processing(-1)
+            self.saver.flush()
     
     @tornado.gen.coroutine
     def _on_word(self, word):
@@ -394,7 +395,7 @@ def main():
       help="""Platform for saving utterances ( \"gcs\" or \"filesystem\"""")
     parser.add_argument('-p', '--path', 
       dest="savepath", 
-      default="/pagoda_utterances", 
+      default="pagoda_utterances", 
       help="""Path on the chosen platform where utterances will \
        be saved (bucket name for GCS, local folder for filesystem""")
 
